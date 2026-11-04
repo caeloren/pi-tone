@@ -1,0 +1,44 @@
+{
+  "name": "pi-tone",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pi Tone: remembered color overrides for Pi's terminal UI, with sixteen built-in palettes and an optional fullscreen canvas. Unset roles keep the original Pi theme; /tone-off restores native theme handling.",
+  "license": "SUL-1.0",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "theme",
+    "tui",
+    "color-scheme"
+  ],
+  "files": [
+    "tone.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": [
+      "./tone.ts"
+    ],
+    "skills": [],
+    "prompts": [],
+    "themes": []
+  },
+  "type": "module",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "author": {
+    "name": "caeloren",
+    "url": "https://github.com/caeloren"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caeloren/pi-tone.git"
+  },
+  "homepage": "https://github.com/caeloren/pi-tone#readme",
+  "bugs": {
+    "url": "https://github.com/caeloren/pi-tone/issues"
+  }
+}
