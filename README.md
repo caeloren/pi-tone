@@ -23,9 +23,11 @@ pi remove git:github.com/caeloren/pi-tone
 ```
 
 - After updating Pi Tone, run `/reload` in any Pi session that is already running. After updating Pi itself, restart Pi.
+- Pi keeps Pi Tone in its own folder, `<agent>/git/github.com/caeloren/pi-tone` (or `.pi/git/github.com/caeloren/pi-tone` in the project with `-l`), and an update can delete every file there that is not part of Pi Tone. Keep nothing of yours in that folder: your palettes belong in `<agent>/pi-tone/themes/` (section 2.3). Move any you have kept there before you update.
+- To stay on this release, install `git:github.com/caeloren/pi-tone@v1.0.0` instead. `pi update` does not move a pinned release; to change it, install another release tag the same way, or the address without `@v1.0.0` to follow the latest version. `pi remove git:github.com/caeloren/pi-tone` removes either form.
 - Before removing Pi Tone, run `/tone-off` in Pi. If you skip it, your saved selection stays in `<agent>/pi-tone.json` (section 2.3) and returns if you reinstall; you can delete that file yourself. Removing never deletes your palettes; delete `<agent>/pi-tone/` if you no longer need them.
 - For a project install, add `-l` (`--local`) to `install` and `remove`. Pi loads project packages only after you trust the project, and the saved selection is still shared by all projects.
-- To install from a downloaded copy of this repository, run `pi install /absolute/path/to/pi-tone`, and remove it with `pi remove` and the same path. Pi loads Pi Tone from that folder, so keep it; to update, replace its files and run `/reload`. Keep the copy outside `<agent>/pi-tone/`: if its folder is `<agent>/pi-tone/` itself or is inside your palette folder, Pi Tone warns and applies no palette.
+- To install from a downloaded copy of this repository, run `pi install /absolute/path/to/pi-tone`, and remove it with `pi remove` and the same path. Pi loads Pi Tone from that folder, so keep it; to update, replace its files and run `/reload`. The copy's folder must not contain your palette folder or be inside it, so do not use `<agent>/pi-tone/`; otherwise Pi Tone shows an error and no palette can be used.
 
 ### 2.2 Commands and file names
 
@@ -39,16 +41,17 @@ A palette's command is `/tone-` followed by its file name without `.json`. Run c
 | `柔和 色.json` | `/tone-柔和 色` |
 
 - Type `/tone-` to see the palettes; completion suggests matching names. Names must match exactly, including case and spaces, so `soft gray` and `soft  gray` (two spaces) are different palettes.
+- Pi's suggestion list ignores letter case, and Enter runs the highlighted suggestion. When two names differ only in case, such as your `Dark.json` and the built-in `dark`, choose with the arrow keys, or press Esc to close the list and then press Enter.
 - `/tone-off` is the only other command.
-- Pi Tone reads a palette when you apply it, so after editing one, run its command again. After adding, renaming, or deleting a palette file, run `/reload`; a renamed file also needs a matching `name`.
+- Pi Tone reads a palette when you apply it, so after editing one, run its command again. After adding a palette with a new name, or renaming or deleting one, run `/reload` to update the commands; a renamed file also needs a matching `name`. Adding or deleting your own copy of a built-in palette takes effect the next time you run its command.
 
-Your palettes must be regular files whose names end in lowercase `.json`. At startup and `/reload`, Pi Tone skips these with a warning:
+Your palettes must be regular files whose names end in lowercase `.json`. At startup and `/reload`, Pi Tone skips these and shows an error that asks you to rename or replace them:
 
-- `off.json` and names that start with `off ` (such as `off gray.json`), which belong to `/tone-off`
+- `off.json` and names that start with `off ` (such as `off gray.json`), in any letter case (such as `Off.json` or `OFF gray.json`), which belong to `/tone-off`; names such as `off-blue.json` and `off_gray.json` are fine
 - names containing `@`, which Pi reserves for file references
 - names with a leading period or another period, such as `.soft.json` or `theme.v2.json`
-- names with whitespace just before `.json`, such as `soft .json`
-- names with path separators, control characters, line or paragraph separators, or Unicode bidirectional formatting characters
+- names with whitespace, or the invisible U+FEFF, just before `.json`, such as `soft .json`, and names with no visible characters
+- names with path separators, control characters, line or paragraph separators, or Unicode bidirectional formatting characters, and names that are not valid UTF-8
 - folders and links named `*.json`; these also hide the built-in palette of the same name
 
 Files with other extensions, such as `dark.JSON` or `notes.txt`, are ignored.
@@ -90,7 +93,7 @@ A palette is a UTF-8 JSON file. For example, `<agent>/pi-tone/themes/soft headin
 }
 ```
 
-Run `/reload`, then `/tone-soft headings`. Only the two roles it sets change; every other role keeps your Pi theme's color.
+Run `/reload`, then `/tone-soft headings`.
 
 | Property | Meaning |
 |---|---|
@@ -126,7 +129,8 @@ Without a canvas, Pi Tone changes only role colors; text and backgrounds drawn i
 - `background` is required and `foreground` is optional. Both take the color values of section 2.4 except `""`.
 - A palette without `canvas` has none: it does not keep the previous palette's canvas or take the canvas of a built-in palette it replaces. All built-in palettes have one.
 - A canvas needs Pi's fullscreen mode. Fullscreen is the default and is chosen with the `tuiMode` setting or the `--tui-mode` option. In regular mode, a palette with a canvas is rejected before anything changes; palettes without a canvas work in both modes.
-- To use a built-in palette in regular mode, copy the example in section 2.6, set `appearance` and the five variables from that palette's row, and remove `canvas`. Without a canvas your terminal's background stays, so use a dark palette on a dark terminal and a light palette on a light one.
+- If you switch Pi to regular mode in `/settings` while a palette with a canvas is active, Pi Tone stops the canvas, restores your Pi theme's colors, and keeps your selection. Switch back to fullscreen and run the palette's command to use it again.
+- To use a built-in palette in regular mode, copy the example in section 2.6, set `appearance` to `"dark"` or `"light"` as the palette's name says, set the five variables from that palette's row, and remove `canvas`. Without a canvas your terminal's background stays, so use a dark palette on a dark terminal and a light palette on a light one.
 
 | In fullscreen | Shown as |
 |---|---|
@@ -134,7 +138,7 @@ Without a canvas, Pi Tone changes only role colors; text and backgrounds drawn i
 | Default foreground, including FG roles set to `""` | `canvas.foreground`, or the terminal default if it is not set |
 | Explicit role colors and panel backgrounds | Unchanged |
 
-The canvas changes only what Pi draws, not the terminal's own colors. Margins outside the terminal's character grid, and the transcript Pi prints when it exits, are not painted.
+The canvas changes only what Pi draws, not the terminal's own colors. Margins outside the terminal's character grid are not painted, and neither is the transcript Pi prints when it exits or is suspended: it keeps the palette's text colors on your terminal's own background, so it can be hard to read when the palette does not suit that background.
 
 ### 2.6 Built-in palettes
 
@@ -306,12 +310,12 @@ When a palette applies successfully, Pi Tone saves only its name to `<agent>/pi-
 ```
 
 - The saved palette is applied again at startup, after `/reload`, and when you start, resume, or fork a session. Its file is read again each time.
-- If the saved palette is missing, invalid, or cannot be shown (for example, it has a canvas and Pi runs in regular mode), Pi Tone shows a warning and keeps Pi's colors. The selection stays saved, so the warning returns until you fix the cause and run `/reload`, or run `/tone-off`.
+- If the saved palette is missing, invalid, or cannot be shown (for example, it has a canvas and Pi runs in regular mode), Pi Tone shows an error and keeps Pi's colors. The selection stays saved, so the error returns until you fix the cause and run `/reload`, choose another palette, or run `/tone-off`.
 - Pi processes that use the same agent folder share the selection. The latest selection wins; other running processes use it after their next `/reload` or new session.
 
 ### 2.9 Turn Pi Tone off
 
-Run `/tone-off`, without arguments, while Pi is idle and has no queued messages. It removes the canvas, restores your Pi theme's colors, deletes the saved selection, and then runs `/reload` when needed so that Pi takes back its theme handling; this also reloads Pi's other resources. It never deletes palettes or changes Pi's settings, and running it again does nothing more.
+Run `/tone-off`, without arguments, while Pi is idle and has no queued messages; if Pi is still working, a warning asks you to run it again later. It removes the canvas, restores your Pi theme's colors, deletes the saved selection, and then, if Pi Tone has paused Pi's theme handling, runs `/reload` so that Pi takes it back; this also reloads Pi's other resources. It never deletes palettes or changes Pi's settings, and once it has finished, running it again does nothing more.
 
 To change the Pi theme under your palette, run `/tone-off`, choose the Pi theme in `/settings`, and then run your palette's command again. Browsing the theme list in `/settings` while a palette is active replaces the palette, even if you press Esc; run its command again to bring it back.
 
@@ -322,21 +326,25 @@ To change the Pi theme under your palette, run `/tone-off`, choose the Pi theme 
 - Pi Tone changes only Pi's TUI: its 56 color roles and, with a canvas, the default colors in fullscreen. HTML export keeps your Pi theme's colors.
 - It does not change terminal colors, fonts, transparency, the cursor, the terminal's text-selection colors, images, or colors printed by other programs.
 - It works only in Pi's interactive TUI. In RPC, JSON, and print modes, it shows no messages and does not read, apply, or save palettes or your selection.
-- While a palette is active, Pi does not reload edited Pi theme files or follow your terminal's dark or light changes. `/tone-off` brings this back.
+- While a palette is active, Pi's theme handling is paused: Pi does not reload edited Pi theme files or follow your terminal's dark or light changes. `/tone-off` brings it back.
+- Another extension that changes Pi's theme replaces the palette, as browsing themes in `/settings` does. If it does so while a session starts, your saved palette may not be restored; run the palette's command again.
 - Exact colors need truecolor output. If your terminal supports truecolor but Pi uses 256 colors, as can happen inside tmux, set `PI_TRUE_COLOR=1`, or set `terminal.trueColor` to `true` in Pi's settings. Terminal apps and their settings, such as transparency, minimum contrast, and how faint text is drawn, also change what you see; Pi Tone is not certified for every terminal app and platform.
-- There is no automatic contrast adjustment. In the built-in palettes, pending, successful, and failed tool panels share one background, errors and warnings share one color, and the thinking levels use two border colors; rely on Pi's labels and symbols to tell them apart.
+- There is no automatic contrast adjustment. In the built-in palettes, pending, successful, and failed tool panels share one background, errors and warnings share one color, and the thinking levels use two border colors; rely on Pi's labels and symbols to tell them apart. Transcript search matches other than the current one have the canvas background, so on it only Pi's underline marks them.
 - Not supported: switching palettes automatically, such as with the system's dark or light mode, and per-project selections.
 
 ### 3.2 When something fails
 
 - Pi Tone checks a palette completely before changing anything, and saves the selection only after its colors and canvas are both shown. If applying fails, the previous look is restored, and an invalid palette file never turns off the palette in use.
-- If a palette fails after it has replaced your Pi theme, Pi's own theme handling stays off. Pi Tone then runs `/reload` itself when it safely can, or the message asks you to run `/reload` or `/tone-off`.
-- If the palette is shown but cannot be saved, a warning says so.
-- If the canvas cannot be drawn safely, Pi Tone turns it off, restores your Pi theme's colors, keeps your selection, and asks you to run `/reload` or `/tone-off`.
-- If `/tone-off` cannot delete the saved selection, it shows a warning and does not reload.
+- If a palette fails after it has replaced your Pi theme, Pi's theme handling stays paused. Pi Tone then runs `/reload` itself when it safely can; otherwise the message says what gives the handling back: `/reload` or `/tone-off` when no selection is saved; `/tone-off` when one is saved, since `/reload` tries the saved palette again; and `/reload` when the saved selection cannot be read.
+- If the palette is shown but cannot be saved, an error says so; the palette stays for the current session.
+- If the canvas cannot keep drawing safely, for example because Pi writes output the canvas does not recognize or another extension takes over Pi's terminal output, Pi Tone stops the canvas, restores your Pi theme's colors, keeps your selection, and shows an error that says how to try again.
+- If `/tone-off` cannot delete the saved selection, it shows an error and does not reload.
+- If a palette command says that Pi has not finished reloading its theme, Pi's last reload stopped before Pi applied its theme, usually with a "Reload failed" error from Pi. Fix what Pi reported and run `/reload`. Until a reload finishes, palettes cannot be applied, and `/tone-off` can clear your selection but cannot bring back Pi's own theme.
 
 ### 3.3 Messages and safety
 
-- Messages are in English and appear as Pi notifications. Problems found at startup or `/reload`, such as skipped files, are listed together in one notice.
-- A palette file may be at most 256 KiB. Symbolic links, non-regular files, and invalid UTF-8 are rejected.
+- Messages are in English and use Pi's own notifications: an error when something failed or cannot be used, a warning when you only need to wait or correct a command, and a plain message for success. Each says what happened and, when something needs your action, what to do.
+- Problems found at startup or `/reload`, such as skipped files, are listed together in one error, ten at most, followed by the number of the rest. A problem with your saved palette is reported once, together with the file or folder problem that causes it.
+- Control characters in file names and paths are shown as escapes such as `\u001b`.
+- A palette file may be at most 256 KiB.
 - Pi Tone makes no network requests, collects no telemetry, runs no external programs, watches no files, and never executes palette content.

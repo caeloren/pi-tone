@@ -4,18 +4,6 @@
   "private": true,
   "description": "Pi Tone: remembered color overrides for Pi's terminal UI, with sixteen built-in palettes and an optional fullscreen canvas. Unset roles keep the original Pi theme; /tone-off restores native theme handling.",
   "license": "SUL-1.0",
-  "keywords": [
-    "pi-package",
-    "pi",
-    "theme",
-    "tui",
-    "color-scheme"
-  ],
-  "files": [
-    "tone.ts",
-    "README.md",
-    "LICENSE"
-  ],
   "pi": {
     "extensions": [
       "./tone.ts"
