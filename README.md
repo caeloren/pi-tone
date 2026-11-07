@@ -348,3 +348,6 @@ To change the Pi theme under your palette, run `/tone-off`, choose the Pi theme 
 - Control characters in file names and paths are shown as escapes such as `\u001b`.
 - A palette file may be at most 256 KiB.
 - Pi Tone makes no network requests, collects no telemetry, runs no external programs, watches no files, and never executes palette content.
+
+
+https://github.com/user-attachments/assets/7a699b9d-1a9a-4b9b-bee7-e73ff9cfcf29
