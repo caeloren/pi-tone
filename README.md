@@ -8,7 +8,7 @@ Sixteen palettes are built in, and you can add your own as JSON files. Your sele
 
 Pi Tone does not change your terminal's settings, Pi's settings, or Pi's theme files. The only file it writes is your saved selection.
 
-Pi Tone 1.0.0 is verified with Pi 1.5.0; other Pi versions may need an update. Author: `caeloren`. License: [Sustainable Use License 1.0](LICENSE) (`SUL-1.0`).
+Pi Tone 1.0.0 is verified with Pi 1.5.2; other Pi versions may need an update. Author: `caeloren`. License: [Sustainable Use License 1.0](LICENSE) (`SUL-1.0`).
 
 ## 2. Usage
 
@@ -24,7 +24,6 @@ pi remove git:github.com/caeloren/pi-tone
 
 - After updating Pi Tone, run `/reload` in any Pi session that is already running. After updating Pi itself, restart Pi.
 - Pi keeps Pi Tone in its own folder, `<agent>/git/github.com/caeloren/pi-tone` (or `.pi/git/github.com/caeloren/pi-tone` in the project with `-l`), and an update can delete every file there that is not part of Pi Tone. Keep nothing of yours in that folder: your palettes belong in `<agent>/pi-tone/themes/` (section 2.3). Move any you have kept there before you update.
-- To stay on this release, install `git:github.com/caeloren/pi-tone@v1.0.0` instead. `pi update` does not move a pinned release; to change it, install another release tag the same way, or the address without `@v1.0.0` to follow the latest version. `pi remove git:github.com/caeloren/pi-tone` removes either form.
 - Before removing Pi Tone, run `/tone-off` in Pi. If you skip it, your saved selection stays in `<agent>/pi-tone.json` (section 2.3) and returns if you reinstall; you can delete that file yourself. Removing never deletes your palettes; delete `<agent>/pi-tone/` if you no longer need them.
 - For a project install, add `-l` (`--local`) to `install` and `remove`. Pi loads project packages only after you trust the project, and the saved selection is still shared by all projects.
 - To install from a downloaded copy of this repository, run `pi install /absolute/path/to/pi-tone`, and remove it with `pi remove` and the same path. Pi loads Pi Tone from that folder, so keep it; to update, replace its files and run `/reload`. The copy's folder must not contain your palette folder or be inside it, so do not use `<agent>/pi-tone/`; otherwise Pi Tone shows an error and no palette can be used.
@@ -116,7 +115,7 @@ Run `/reload`, then `/tone-soft headings`.
 - Any other text is read as a variable name, so `"red"` works only if `vars` defines `red`.
 - Pi Tone rejects the whole file, before anything changes, if it has an unknown property or role, an invalid value, or a variable that is undefined, circular, or invalid, even if unused. Comments and trailing commas are not allowed, and if a key is repeated, the last value wins.
 - A role you leave out keeps your Pi theme's color. `""` uses the terminal's default color, which a canvas can repaint.
-- A palette with no colors and no canvas shows your Pi theme's colors and is still saved as your selection; it does not turn Pi Tone off.
+- A palette that sets no colors, no canvas, and no `appearance` shows your Pi theme's colors and is still saved as your selection; it does not turn Pi Tone off. A palette that sets only `appearance` keeps your Pi theme's colors with that appearance.
 
 ### 2.5 Fullscreen canvas
 
@@ -206,7 +205,7 @@ Saved as `blue-dark.json` with `"name": "blue-dark"`, it replaces the built-in `
 
 ### 2.7 Color roles
 
-Pi 1.5.0 has 56 TUI color roles. FG roles color text and BG roles color backgrounds; section 2.6 shows the shade each role uses in the built-in palettes.
+Pi 1.5.2 has 56 TUI color roles. FG roles color text and BG roles color backgrounds; section 2.6 shows the shade each role uses in the built-in palettes.
 
 #### General interface
 
@@ -334,10 +333,11 @@ To change the Pi theme under your palette, run `/tone-off`, choose the Pi theme 
 
 ### 3.2 When something fails
 
-- Pi Tone checks a palette completely before changing anything, and saves the selection only after its colors and canvas are both shown. If applying fails, the previous look is restored, and an invalid palette file never turns off the palette in use.
+- Pi Tone checks a palette completely before changing anything, and saves the selection only after its colors and canvas are both shown. If applying fails, the previous look is restored, and an invalid palette file never turns off the palette in use. What another extension took over meanwhile is not taken back: a theme it set stays, and a previous canvas stops as described below.
 - If a palette fails after it has replaced your Pi theme, Pi's theme handling stays paused. Pi Tone then runs `/reload` itself when it safely can; otherwise the message says what gives the handling back: `/reload` or `/tone-off` when no selection is saved; `/tone-off` when one is saved, since `/reload` tries the saved palette again; and `/reload` when the saved selection cannot be read.
 - If the palette is shown but cannot be saved, an error says so; the palette stays for the current session.
-- If the canvas cannot keep drawing safely, for example because Pi writes output the canvas does not recognize or another extension takes over Pi's terminal output, Pi Tone stops the canvas, restores your Pi theme's colors, keeps your selection, and shows an error that says how to try again.
+- If the canvas cannot keep drawing safely, for example because Pi writes output the canvas does not recognize, another extension takes over Pi's terminal output, or another extension removes the canvas while you apply another palette with a canvas, Pi Tone stops the canvas, restores your Pi theme's colors, keeps your selection, and shows an error that says how to try again.
+- If another extension removes the canvas at any other time, the canvas stops without a message, and the palette's colors stay until you run the palette's command again, `/reload`, or `/tone-off`.
 - If `/tone-off` cannot delete the saved selection, it shows an error and does not reload.
 - If a palette command says that Pi has not finished reloading its theme, Pi's last reload stopped before Pi applied its theme, usually with a "Reload failed" error from Pi. Fix what Pi reported and run `/reload`. Until a reload finishes, palettes cannot be applied, and `/tone-off` can clear your selection but cannot bring back Pi's own theme.
 

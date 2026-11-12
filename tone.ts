@@ -48,7 +48,7 @@ interface PreparedTone {
   source: ThemeSource;
   path?: string;
 }
-// changed: Pi's colors were replaced. empty: the palette sets no colors and has no canvas.
+// changed: Pi's colors were replaced. empty: the palette sets nothing (setsNothing).
 type ApplyResult =
   | { applied: true; source: ThemeSource; empty: boolean; changed: boolean }
   | { applied: false; problem: Problem; nativeRecovery: boolean; reloadSafe: boolean };
@@ -963,6 +963,11 @@ function merge(base: Baseline, patch: Patch): Theme {
   });
 }
 
+// A palette that sets no colors, no canvas, and no appearance changes nothing, which is not the same as Off.
+function setsNothing(patch: Patch): boolean {
+  return Object.keys(patch.colors).length === 0 && patch.canvas === undefined && patch.appearance === undefined;
+}
+
 // Sixteen built-in palettes, kept as data in this program. Each one becomes a complete Tone document
 // (G0-G4 variables, every role, canvas G0/G4) and passes through the same parser as user files.
 type Shade = "G0" | "G1" | "G2" | "G3" | "G4";
@@ -1221,6 +1226,9 @@ function takePausedTheme(): { readonly colors: unknown } | undefined {
 const jsonSuffix = Buffer.from(".json");
 const busyMessage = "Pi is still working. Run /tone-off again when Pi has finished its current work and queued messages.";
 const reloadPending = "Pi has not finished reloading its theme. Fix any problem Pi reported and run /reload, then run the command again.";
+const terminalTaken = "Another extension took over Pi's terminal output.";
+const canvasRemoved = "Another extension removed the canvas.";
+const themeTaken = "Another extension took over Pi's theme.";
 
 export default function (pi: ExtensionAPI): void {
   const warnings: Diagnostic[] = [];
@@ -1281,6 +1289,13 @@ export default function (pi: ExtensionAPI): void {
     }
   }
 
+  // How another extension took this canvas over, if it did: by removing it, which only another extension
+  // can do while Pi Tone is drawing, or by replacing Pi's terminal output while the canvas was installed.
+  function takeoverOf(binding: CanvasBinding): string | undefined {
+    if (!binding.live) return canvasRemoved;
+    return binding.tui.terminal === binding.adapter ? undefined : terminalTaken;
+  }
+
   // Decide about a canvas that failed or may no longer paint. A newer theme owner wins quietly.
   // A failure, another terminal owner or regular mode stops the canvas, reported once.
   function reviewCanvas(binding: CanvasBinding): void {
@@ -1298,7 +1313,7 @@ export default function (pi: ExtensionAPI): void {
           ? `Run ${command} to try again. If the canvas stops again, choose a palette without a canvas, or run /tone-off to turn Pi Tone off.`
           : `Resize the terminal, then run ${command}.${off}`);
       } else if (tui.terminal !== adapter) {
-        failCanvas(binding, "Another extension took over Pi's terminal output.", `Run ${command} to try again.${off}`);
+        failCanvas(binding, terminalTaken, `Run ${command} to try again.${off}`);
       } else if (tui.mode !== "fullscreen") {
         failCanvas(binding, "Pi switched to regular mode, and a canvas works only in fullscreen mode.",
           `Switch back to fullscreen mode in /settings, then run ${command}.${off}`);
@@ -1397,9 +1412,8 @@ export default function (pi: ExtensionAPI): void {
   }
 
   function configureCanvas(binding: CanvasBinding, state: CanvasState | undefined, command: string): void {
-    if (!binding.live || binding.tui.terminal !== binding.adapter) {
-      throw new Problem("Another extension took over Pi's terminal output.", `Run ${command} to try again.`);
-    }
+    const taken = takeoverOf(binding);
+    if (taken !== undefined) throw new Problem(taken, `Run ${command} to try again.`);
     if (!binding.adapter.atBoundary) throw new Problem("Pi was in the middle of drawing the screen.", `Run ${command} to try again.`);
     binding.adapter.configure(state?.paint);
     binding.state = state;
@@ -1408,10 +1422,19 @@ export default function (pi: ExtensionAPI): void {
   function drawCanvas(binding: CanvasBinding, requireCanvas: boolean, command: string): void {
     const count = binding.adapter.paintedFrames;
     binding.tui.renderNow(true);
+    if (!requireCanvas) return;
     const { error } = binding.adapter;
-    if (requireCanvas && (error !== undefined || binding.adapter.paintedFrames === count || !binding.adapter.fullGridPainted)) {
-      throw new Problem(error === undefined ? "Pi did not draw a full screen that the canvas could paint." : causeOf(error),
-        `Run ${command} to try again, or choose a palette without a canvas.`);
+    const retry = `Run ${command} to try again, or choose a palette without a canvas.`;
+    // In the order a running canvas is stopped in: its own failure first, then another owner of the terminal.
+    if (error !== undefined) throw new Problem(causeOf(error), retry);
+    // A canvas that is no longer Pi's terminal output cannot keep painting, whatever it painted before.
+    const taken = takeoverOf(binding);
+    if (taken !== undefined) throw new Problem(taken, `Run ${command} to try again.`);
+    // Nor can one whose theme another extension replaced while Pi drew.
+    const { state } = binding;
+    if (state !== undefined && binding.ctx.ui.theme.colors !== state.owner.colors) throw new Problem(themeTaken, `Run ${command} to try again.`);
+    if (binding.adapter.paintedFrames === count || !binding.adapter.fullGridPainted) {
+      throw new Problem("Pi did not draw a full screen that the canvas could paint.", retry);
     }
   }
 
@@ -1495,6 +1518,9 @@ export default function (pi: ExtensionAPI): void {
       // Pass a Theme object: the string overload persists the user's theme setting.
       const result = ctx.ui.setTheme(next);
       if (!result.success) throw new Error(result.error || "Pi could not apply the theme.");
+      // Pi applies a theme synchronously and invalidates every component on the way, so another extension can
+      // take Pi's theme over before this call returns.
+      if (ctx.ui.theme.colors !== next.colors) throw new Error(themeTaken);
     } catch (error) {
       if (ctx.ui.theme.colors === next.colors) {
         try {
@@ -1572,7 +1598,7 @@ export default function (pi: ExtensionAPI): void {
   }
 
   // `offWorks` is false when this Pi version cannot run /tone-off, which needs the reload API. A restore runs
-  // from an event, whose context cannot tell, so it counts on a Pi that can, as Pi 1.5.0 can.
+  // from an event, whose context cannot tell, so it counts on a Pi that can, as the verified Pi version can.
   function notifyFailure(ctx: ExtensionContext, name: string, restoring: boolean,
       result: { problem: Problem; nativeRecovery: boolean }, offWorks = true): void {
     // A fix that already asks for /reload also restores Pi's theme handling. Otherwise say what gives it
@@ -1608,7 +1634,7 @@ export default function (pi: ExtensionAPI): void {
       const stale = canvasBinding;
       if (stale !== undefined && (!canvasCurrent(stale) || stale.adapter.error !== undefined)) reviewCanvas(stale);
       const ownTheme = active !== undefined && ctx.ui.theme.colors === active.colors;
-      const empty = Object.keys(patch.colors).length === 0 && patch.canvas === undefined;
+      const empty = setsNothing(patch);
       if (empty && (!ownTheme || !baseline)) {
         clearCanvas();
         return { applied: true, source, empty, changed: false };
@@ -1617,7 +1643,7 @@ export default function (pi: ExtensionAPI): void {
       let next: Theme;
       let paint: CanvasAnsi | undefined;
       try {
-        next = merge(base, empty ? { colors: {} } : patch);
+        next = merge(base, patch);
         // Validate and encode before changing anything. Omitted canvas means no canvas: not the
         // preceding palette's canvas, and not the canvas of a built-in palette with the same name.
         paint = patch.canvas === undefined ? undefined : {
@@ -1640,48 +1666,66 @@ export default function (pi: ExtensionAPI): void {
         replaceTheme(next, previous, base, ctx);
         if (binding) drawCanvas(binding, paint !== undefined, command);
         if (!paint) clearCanvas(false);
+        // Another extension can also take Pi's theme over while Pi draws or removes the canvas.
+        if (ctx.ui.theme.colors !== next.colors) throw new Problem(themeTaken, `Run ${command} to try again.`);
       } catch (error) {
+        // Another extension that removed the canvas or replaced Pi's terminal output during the change owns it now.
+        let takenOver = binding !== undefined && takeoverOf(binding) !== undefined;
+        // The previous canvas comes back only while it is still Pi Tone's: one that another extension took over
+        // is never taken back, and its palette's colors go with it, as when a running canvas stops.
+        const canvasBack = oldState !== undefined && oldBinding !== undefined && oldBinding.live && !takenOver;
+        const back = oldState !== undefined && !canvasBack ? merge(base, { colors: {} }) : previous;
         // Put the whole previous look back; only the caller saves, and only after full success.
         // This is an in-memory operation, not a cross-process transaction.
         try {
           const current = ctx.ui.theme.colors;
-          if (current === next.colors) {
-            const result = ctx.ui.setTheme(previous);
-            if (!result.success) throw new Error("Pi rejected the previous theme.");
-          } else if (current !== previousColors && current !== previous.colors) {
+          if (current !== next.colors && current !== previousColors && current !== previous.colors) {
             throw new Error("Another theme took over during the failed change.");
           }
-          if (ctx.ui.theme.colors === previous.colors) {
+          if (current === next.colors || back !== previous) {
+            const result = ctx.ui.setTheme(back);
+            if (!result.success) throw new Error("Pi rejected the previous theme.");
+            if (ctx.ui.theme.colors !== back.colors) throw new Error("Another theme took over during the failed change.");
+          }
+          const colorsBack = ctx.ui.theme.colors;
+          if (colorsBack === back.colors) {
             baseline = base;
-            active = previous;
+            active = back;
           } else {
             baseline = previousBase;
             active = previousActive;
           }
-          if (oldState && oldBinding?.live) {
+          if (canvasBack) {
             configureCanvas(oldBinding, oldState, command);
             drawCanvas(oldBinding, true, command);
-          } else if (oldState) {
-            const restored = acquireCanvas(ctx, command);
-            configureCanvas(restored, oldState, command);
-            drawCanvas(restored, true, command);
           } else {
             clearCanvas(false);
             // A restored snapshot also needs a full redraw to remove painted cells.
             binding?.tui.renderNow(true);
           }
+          // Another extension can also take over during these redraws: then Pi's theme or terminal output is
+          // not what Pi Tone put back, which is its restored canvas or the terminal the canvas was installed on.
+          const terminalBack = canvasBinding?.adapter ?? binding?.adapter.original;
+          if (ctx.ui.theme.colors !== colorsBack || (binding !== undefined && binding.tui.terminal !== terminalBack)) takenOver = true;
         } catch {
           // Never leave a failed adapter rewriting later output.
           try { clearCanvas(); } catch { /* The problem below already asks for /reload. */ }
           throw new Problem(`${problemOf(error, command).message} Pi Tone also could not put the previous colors back.`,
             runReload, source, tone.path);
         }
-        // Only a successful visual rollback may lead to an automatic reload; a conflicting owner or a
-        // failed rollback keeps the explicit guidance instead.
-        reloadSafe = nativeRecoveryRequired;
+        if (oldState !== undefined && !canvasBack) {
+          // Pi's colors are shown without Pi's theme handling, as after a canvas that stops.
+          nativeRecoveryRequired = true;
+          const problem = problemOf(error, command);
+          throw new Problem(`${problem.message} The canvas of ${describe(oldState.name, oldState.source)} stopped too, so Pi's colors are back, and your saved selection did not change.`,
+            problem.fix, source, tone.path);
+        }
+        // Only a successful visual rollback with no other owner of Pi's theme or terminal output may lead to an
+        // automatic reload; a conflicting owner or a failed rollback keeps the explicit guidance instead.
+        reloadSafe = nativeRecoveryRequired && !takenOver;
         throw error;
       }
-      // A palette with colors now owns Pi's theme. An empty palette leaves Pi's colors without its theme handling.
+      // A palette that sets something now owns Pi's theme. An empty palette leaves Pi's colors without its theme handling.
       nativeRecoveryRequired = empty;
       return { applied: true, source, empty, changed: true };
     } catch (error) {
@@ -1774,9 +1818,14 @@ export default function (pi: ExtensionAPI): void {
       let restored = false;
       try {
         if (!discardHolding && baseline && active && ctx.ui.theme.colors === active.colors) {
-          replaceTheme(merge(baseline, { colors: {} }), active, baseline, ctx);
-          restored = true;
-          nativeRecoveryRequired = true; // Pi's colors are back, but its theme handling is still paused.
+          try {
+            replaceTheme(merge(baseline, { colors: {} }), active, baseline, ctx);
+            restored = true;
+          } catch (error) {
+            // Another extension that took Pi's theme over meanwhile replaced the palette as well, so Off goes on.
+            if (!(error instanceof Error) || error.message !== themeTaken) throw error;
+          }
+          nativeRecoveryRequired = true; // Pi's theme handling is still paused.
         }
       } catch (error) {
         ctx.ui.notify(`Could not turn Pi Tone off, because Pi's colors could not be put back: ${causeOf(error)} Your saved selection was not cleared. Run /reload, then run /tone-off again.`, "error");
@@ -1812,10 +1861,17 @@ export default function (pi: ExtensionAPI): void {
         ? `Apply the ${only.name} palette and save it as your selection.`
         : `Apply ${candidates.has("") ? `the ${command.slice(5)} palette, or ` : ""}a palette named ${command.slice(5)} followed by a space and more text, and save it as your selection.`,
       getArgumentCompletions: (prefix) => {
-        const items: { value: string; label: string }[] = [];
+        // Pi shows these as they are. Like Pi's own suggestions they ignore letter case; those that start with the
+        // text as typed come first, so a whole name typed is the highlighted one. Spaces still count, and the
+        // command itself still needs the exact name.
+        const folded = prefix.toLowerCase();
+        const typed: { value: string; label: string }[] = [];
+        const other: { value: string; label: string }[] = [];
         for (const item of completions) {
-          if (item.value.startsWith(prefix)) items.push({ ...item });
+          if (item.value.startsWith(prefix)) typed.push({ ...item });
+          else if (item.value.toLowerCase().startsWith(folded)) other.push({ ...item });
         }
+        const items = [...typed, ...other];
         return items.length === 0 ? null : items;
       },
       handler: async (args, ctx) => {
@@ -1942,7 +1998,7 @@ export default function (pi: ExtensionAPI): void {
       prepared = readTone(candidate);
       const tone = prepared;
       const { patch } = tone;
-      if (Object.keys(patch.colors).length === 0 && patch.canvas === undefined) return; // Pi's own reset is enough.
+      if (setsNothing(patch)) return; // Pi's own reset is enough.
       if (patch.canvas) {
         let capable = false;
         try {
